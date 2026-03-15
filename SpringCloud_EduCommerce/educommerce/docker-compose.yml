@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - educommerce-network
+
+  config-server:
+    build: ./config-server
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    environment:
+      - CONFIG_GIT_URI=https://github.com/your-org/educommerce-config
+    networks:
+      - educommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    networks:
+      - educommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - JWT_SECRET=educommerce-super-secret-key-for-jwt-signing-2024
+      - ZIPKIN_URL=http://zipkin:9411
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - educommerce-network
+
+  student-service:
+    build: ./student-service
+    container_name: student-service
+    ports:
+      - "8081:8081"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - JWT_SECRET=educommerce-super-secret-key-for-jwt-signing-2024
+      - DB_PASSWORD=password
+      - ZIPKIN_URL=http://zipkin:9411
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - educommerce-network
+
+  attendance-service:
+    build: ./attendance-service
+    container_name: attendance-service
+    ports:
+      - "8082:8082"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=password
+      - ZIPKIN_URL=http://zipkin:9411
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - educommerce-network
+
+  result-service:
+    build: ./result-service
+    container_name: result-service
+    ports:
+      - "8083:8083"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=password
+      - ZIPKIN_URL=http://zipkin:9411
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - educommerce-network
+
+networks:
+  educommerce-network:
+    driver: bridge
